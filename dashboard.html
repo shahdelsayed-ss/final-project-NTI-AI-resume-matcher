@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Job Market Analytics Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --primary:#C2185B;
+    --primary-light:#EC407A;
+    --pale:#FDEEF3;
+    --pale-2:#FBD9E6;
+    --ink:#2B1420;
+    --muted:#8A5D6E;
+    --card:#FFFFFF;
+    --accent:#880E4F;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI',Calibri,Arial,sans-serif;
+    background:linear-gradient(180deg,var(--pale) 0%, #FFF5F8 100%);
+    color:var(--ink);
+    padding:28px 36px 60px;
+  }
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom:22px;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  header h1{
+    font-size:26px;
+    margin:0;
+    color:var(--accent);
+    letter-spacing:.3px;
+  }
+  header p{
+    margin:2px 0 0;
+    color:var(--muted);
+    font-size:13px;
+  }
+  .slicer{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:var(--card);
+    border:1px solid var(--pale-2);
+    border-radius:10px;
+    padding:8px 10px;
+    box-shadow:0 2px 10px rgba(194,24,91,.08);
+  }
+  .slicer label{
+    font-size:12px;
+    font-weight:600;
+    color:var(--accent);
+    margin-right:2px;
+  }
+  .chip{
+    padding:6px 14px;
+    border-radius:20px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    border:1px solid var(--pale-2);
+    background:var(--pale);
+    color:var(--accent);
+    transition:.15s;
+    user-select:none;
+  }
+  .chip:hover{background:var(--pale-2);}
+  .chip.active{
+    background:var(--primary);
+    border-color:var(--primary);
+    color:#fff;
+  }
+  .kpi-row{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:18px;
+    margin-bottom:20px;
+  }
+  .kpi{
+    background:var(--card);
+    border-radius:14px;
+    padding:18px 22px;
+    box-shadow:0 2px 12px rgba(194,24,91,.08);
+    border:1px solid var(--pale-2);
+    position:relative;
+    overflow:hidden;
+  }
+  .kpi::after{
+    content:"";
+    position:absolute;
+    right:-30px; top:-30px;
+    width:90px; height:90px;
+    border-radius:50%;
+    background:var(--pale);
+  }
+  .kpi .label{
+    font-size:12px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.6px;
+    color:var(--muted);
+    position:relative;
+  }
+  .kpi .value{
+    font-size:38px;
+    font-weight:700;
+    color:var(--primary);
+    margin-top:6px;
+    position:relative;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:18px;
+  }
+  .grid .card:first-child{grid-column:1 / -1;}
+  .card{
+    background:var(--card);
+    border-radius:14px;
+    padding:18px 20px 10px;
+    box-shadow:0 2px 12px rgba(194,24,91,.08);
+    border:1px solid var(--pale-2);
+  }
+  .card h3{
+    margin:0 0 10px;
+    font-size:15px;
+    color:var(--accent);
+    font-weight:700;
+  }
+  .card .sub{
+    font-size:11px;
+    color:var(--muted);
+    margin:-8px 0 10px;
+  }
+  canvas{max-height:280px;}
+  .full{grid-column:1 / -1;}
+  footer{
+    text-align:center;
+    color:var(--muted);
+    font-size:11px;
+    margin-top:26px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Job Market Analytics Dashboard</h1>
+    <p>Job postings analysis — categories, roles &amp; required skills</p>
+  </div>
+  <div class="slicer">
+    <label>Category:</label>
+    <div id="chips"></div>
+  </div>
+</header>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="label">Total Jobs</div><div class="value" id="kpiTotal">0</div></div>
+  <div class="kpi"><div class="label">Number of Categories</div><div class="value" id="kpiCats">0</div></div>
+  <div class="kpi"><div class="label">Number of Unique Skills</div><div class="value" id="kpiSkills">0</div></div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>Jobs per Category</h3>
+    <div class="sub">Volume of postings by category</div>
+    <canvas id="chartCatBar"></canvas>
+  </div>
+  <div class="card">
+    <h3>Top 10 Most Frequent Job Titles</h3>
+    <div class="sub">Most repeated job titles</div>
+    <canvas id="chartJobs"></canvas>
+  </div>
+  <div class="card">
+    <h3>Top 10 Most Required Skills</h3>
+    <div class="sub">Most frequently requested skills</div>
+    <canvas id="chartSkills"></canvas>
+  </div>
+</div>
+
+<footer>AI Resume Matcher — Job Postings Dataset · Dashboard prototype</footer>
+
+<script>
+const DATA = {
+  "total_jobs": 1167,
+  "num_categories": 5,
+  "num_unique_skills": 4984,
+  "categories": [
+    "BUSINESS-DEVELOPMENT",
+    "FINANCE",
+    "HR",
+    "INFORMATION-TECHNOLOGY",
+    "SALES"
+  ],
+  "jobs_per_category": {
+    "INFORMATION-TECHNOLOGY": 240,
+    "BUSINESS-DEVELOPMENT": 239,
+    "FINANCE": 236,
+    "SALES": 232,
+    "HR": 220
+  },
+  "overall": {
+    "top_jobs": {
+      "Business Development Manager": 53,
+      "Human Resources Generalist": 34,
+      "Business Development Representative": 33,
+      "Human Resources Manager": 28,
+      "Information Technology Support Specialist": 16,
+      "Human Resources Business Partner": 15,
+      "Finance Manager": 15,
+      "Director of Finance": 13,
+      "Human Resources Coordinator": 11,
+      "Information Technology Project Manager": 11
+    },
+    "top_skills": {
+      "communication": 1092,
+      "problem solving": 878,
+      "adaptability": 588,
+      "teamwork": 569,
+      "collaboration": 341,
+      "leadership": 325,
+      "time management": 316,
+      "interpersonal skills": 288,
+      "customer service": 272,
+      "relationship building": 267
+    }
+  },
+  "by_category": {
+    "BUSINESS-DEVELOPMENT": {
+      "count": 239,
+      "top_jobs": {
+        "Business Development Manager": 53,
+        "Business Development Representative": 33,
+        "Business Development Specialist": 7,
+        "Director of Business Development": 6,
+        "Business Development Executive": 6,
+        "Business Development Associate": 5,
+        "Vice President of Business Development": 4,
+        "Business Development (Sales) Manager": 2,
+        "Business Development Director": 2,
+        "Business Development Intern": 2
+      },
+      "top_skills": {
+        "communication": 225,
+        "problem solving": 169,
+        "adaptability": 134,
+        "business development": 111,
+        "relationship building": 104,
+        "teamwork": 103,
+        "time management": 71,
+        "sales": 70,
+        "negotiation": 65,
+        "data analysis": 61
+      },
+      "unique_skills": 1107
+    },
+    "FINANCE": {
+      "count": 236,
+      "top_jobs": {
+        "Finance Manager": 15,
+        "Director of Finance": 13,
+        "Vice President Finance": 6,
+        "Finance Director": 3,
+        "Finance Analyst": 3,
+        "Senior Finance Manager": 2,
+        "Finance Project Leader": 2,
+        "Director of Finance And Accounting": 2,
+        "Vice President of Finance": 2,
+        "Regional Finance Process Manager": 2
+      },
+      "top_skills": {
+        "communication": 221,
+        "problem solving": 185,
+        "teamwork": 117,
+        "financial analysis": 108,
+        "adaptability": 105,
+        "leadership": 104,
+        "collaboration": 96,
+        "financial reporting": 91,
+        "data analysis": 70,
+        "attention to detail": 69
+      },
+      "unique_skills": 1307
+    },
+    "HR": {
+      "count": 220,
+      "top_jobs": {
+        "Human Resources Generalist": 34,
+        "Human Resources Manager": 28,
+        "Human Resources Business Partner": 15,
+        "Human Resources Coordinator": 11,
+        "Human Resources Specialist": 9,
+        "Human Resources Assistant": 7,
+        "Human Resources Director": 7,
+        "Director of Human Resources": 5,
+        "Senior Human Resources Business Partner": 5,
+        "Vice President Human Resources": 4
+      },
+      "top_skills": {
+        "communication": 207,
+        "problem solving": 171,
+        "employee relations": 102,
+        "adaptability": 102,
+        "teamwork": 101,
+        "interpersonal skills": 99,
+        "attention to detail": 81,
+        "performance management": 79,
+        "data analysis": 76,
+        "leadership": 72
+      },
+      "unique_skills": 989
+    },
+    "INFORMATION-TECHNOLOGY": {
+      "count": 240,
+      "top_jobs": {
+        "Information Technology Support Specialist": 16,
+        "Information Technology Project Manager": 11,
+        "Director of Information Technology": 10,
+        "Information Technology Project Coordinator": 10,
+        "Information Technology Manager": 10,
+        "Information Technology Specialist": 7,
+        "Information Technology Technician": 6,
+        "Information Technology System Administrator": 6,
+        "Information Technology Support Technician": 5,
+        "Information Technology Help Desk": 5
+      },
+      "top_skills": {
+        "communication": 219,
+        "problem solving": 191,
+        "adaptability": 112,
+        "teamwork": 101,
+        "collaboration": 88,
+        "project management": 84,
+        "leadership": 69,
+        "customer service": 66,
+        "time management": 57,
+        "attention to detail": 51
+      },
+      "unique_skills": 1818
+    },
+    "SALES": {
+      "count": 232,
+      "top_jobs": {
+        "Salesperson": 8,
+        "Sales Manager": 8,
+        "Sales Associate": 5,
+        "Seasonal Sales Associate": 5,
+        "Sales Representative": 4,
+        "Territory Sales Manager": 4,
+        "Sales Consultant": 3,
+        "Sales Account Manager": 3,
+        "Outside Sales Representative": 3,
+        "Salesforce Developer": 3
+      },
+      "top_skills": {
+        "communication": 220,
+        "problem solving": 162,
+        "teamwork": 147,
+        "adaptability": 135,
+        "customer service": 120,
+        "sales": 77,
+        "time management": 73,
+        "relationship building": 68,
+        "customer relationship management": 44,
+        "product knowledge": 44
+      },
+      "unique_skills": 1094
+    }
+  }
+};
+
+const pinkPalette = ["#C2185B","#EC407A","#F06292","#F48FB1","#AD1457","#880E4F","#F8BBD0","#E91E63","#D81B60","#F473A6"];
+
+let currentCategory = "ALL";
+let charts = {};
+
+function buildChips(){
+  const wrap = document.getElementById('chips');
+  const cats = ["ALL", ...DATA.categories];
+  wrap.innerHTML = "";
+  cats.forEach(c=>{
+    const el = document.createElement('span');
+    el.className = 'chip' + (c===currentCategory ? ' active':'');
+    el.textContent = c === "ALL" ? "All" : c.replace(/-/g,' ');
+    el.onclick = ()=>{ currentCategory = c; render(); };
+    wrap.appendChild(el);
+  });
+}
+
+function getSlice(){
+  if(currentCategory === "ALL"){
+    return {
+      totalJobs: DATA.total_jobs,
+      numCategories: DATA.num_categories,
+      numSkills: DATA.num_unique_skills,
+      jobsPerCategory: DATA.jobs_per_category,
+      topJobs: DATA.overall.top_jobs,
+      topSkills: DATA.overall.top_skills
+    };
+  }
+  const c = DATA.by_category[currentCategory];
+  const jobsPerCategory = {};
+  jobsPerCategory[currentCategory] = c.count;
+  return {
+    totalJobs: c.count,
+    numCategories: 1,
+    numSkills: c.unique_skills,
+    jobsPerCategory: jobsPerCategory,
+    topJobs: c.top_jobs,
+    topSkills: c.top_skills
+  };
+}
+
+function destroy(id){ if(charts[id]){ charts[id].destroy(); } }
+
+function barChart(id, labels, values, horizontal){
+  destroy(id);
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: labels,
+      datasets:[{
+        data: values,
+        backgroundColor: pinkPalette,
+        borderRadius:6,
+        maxBarThickness:28
+      }]
+    },
+    options:{
+      indexAxis: horizontal ? 'y' : 'x',
+      responsive:true,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ grid:{ color:'#FBE4EC' }, ticks:{ color:'#8A5D6E' } },
+        y:{ grid:{ display:false }, ticks:{ color:'#8A5D6E' } }
+      }
+    }
+  });
+}
+
+function render(){
+  buildChips();
+  const s = getSlice();
+
+  document.getElementById('kpiTotal').textContent = s.totalJobs;
+  document.getElementById('kpiCats').textContent = s.numCategories;
+  document.getElementById('kpiSkills').textContent = s.numSkills.toLocaleString();
+
+  const catLabels = Object.keys(s.jobsPerCategory).map(k=>k.replace(/-/g,' '));
+  const catValues = Object.values(s.jobsPerCategory);
+  barChart('chartCatBar', catLabels, catValues, false);
+
+  const jobLabels = Object.keys(s.topJobs);
+  const jobValues = Object.values(s.topJobs);
+  barChart('chartJobs', jobLabels, jobValues, true);
+
+  const skillLabels = Object.keys(s.topSkills);
+  const skillValues = Object.values(s.topSkills);
+  barChart('chartSkills', skillLabels, skillValues, true);
+}
+
+render();
+</script>
+</body>
+</html>
